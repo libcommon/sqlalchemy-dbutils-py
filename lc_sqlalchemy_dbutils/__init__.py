@@ -1,5 +1,5 @@
-#!/usr/bin/env sh
-## remove-tests.sh
+## -*- coding: UTF-8 -*-
+## init.py
 ##
 ## Copyright (c) 2019 libcommon
 ##
@@ -22,22 +22,4 @@
 ## SOFTWARE.
 
 
-if [ $# -lt 1 ]
-then
-    echo "::: ERROR: Must supply at least one file/directory to remove tests from"
-    exit 1
-fi
-
-PATTERN='if os.environ.get("ENVIRONMENT") == "TEST"'
-
-if [ -x $(which gsed) ]
-then
-    COMMAND="gsed"
-else
-    COMMAND="sed"
-fi
-
-echo "::: INFO: Removing tests from ${@}"
-find "${@}" -type f -exec $COMMAND -i'' -n "/${PATTERN}/q;p" {} \; \
-    -exec $COMMAND -i'' '$d' {} \; \
-    -exec $COMMAND -i'' '$d' {} \;
+__author__ = "libcommon"
