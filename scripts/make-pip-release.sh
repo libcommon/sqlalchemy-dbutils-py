@@ -36,10 +36,10 @@ fi
 
 PACKAGE_VERSION="${1}"
 shift 1
-PACKAGE_NAME="<INSERT PACKAGE NAME>"
-PACKAGE_DESCRIPTION="<INSERT PACKAGE DESCRIPTION>"
-PACKAGE_CODE_URL="<INSERT PACKAGE CODE URL>"
-PACKAGE_MIN_PYTHON_VERSION="<INSERT MIN PYTHON VERSION>"
+PACKAGE_NAME="lc_sqlalchemy_dbutils"
+PACKAGE_DESCRIPTION="Python library with utilities for working with databases through SQLAlchemy."
+PACKAGE_CODE_URL="https:\/\/github.com\/libcommon\/sqlalchemy-dbutils-py"
+PACKAGE_MIN_PYTHON_VERSION="3.6"
 
 BRANCH_NAME=$(git rev-parse --abbrev-ref HEAD)
 TAG_NAME="v${PACKAGE_VERSION}"
