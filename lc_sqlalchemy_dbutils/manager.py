@@ -24,11 +24,14 @@ from typing import Any, Optional, Union
 
 from sqlalchemy import create_engine as sqla_create_engine, MetaData
 from sqlalchemy.engine import Engine
+from sqlalchemy.exc import InvalidRequestError
 from sqlalchemy.orm import scoped_session as ScopedSession, Session, sessionmaker as SessionMaker
 from sqlalchemy.orm.query import Query
 
 
 __author__ = "libcommon"
+
+
 DBManagerSessionFactory = Union[ScopedSession, SessionMaker]
 DBManagerSession = Union[ScopedSession, Session]
 
@@ -37,10 +40,10 @@ class DBManager:
     """SQLAlchemy ORM database connection manager with 
     utility methods for connecting to, querying, performing/rolling back
     transactions on, and deleting records from the database.  Agnostic to
-    database backend and designed for use within a single process (i.e., not
-    with the the `multiprocessing` library).
+    database backend and designed for use within a single process (not shared
+    by multiple processes.)
     """
-    __slots__ = ("_engine", "_metadata", "_scoped_sessions", "_session", "_session_factory", "connection_uri",)
+    __slots__ = ("_engine", "_scoped_sessions", "_session", "_session_factory", "connection_uri", "metadata",)
 
     @staticmethod
     def bootstrap_db(engine: Engine, metadata: MetaData) -> None:
@@ -63,13 +66,13 @@ class DBManager:
                  metadata: MetaData = None,
                  scoped_sessions: bool = False):
         self.connection_uri = connection_uri
-        self._metadata: MetaData = metadata
+        self.metadata: MetaData = metadata
         self._scoped_sessions = scoped_sessions
         self._engine: Optional[Engine] = None
         self._session: Optional[Session] = None
         self._session_factory: Optional[DBManagerSessionFactory] = None
 
-    def gen_engine(self, **kwargs) -> "DBManager":
+    def create_engine(self, **kwargs) -> "DBManager":
         """
         Args:
             kwargs  => passed to SQLAlchemy Engine constructor
@@ -108,7 +111,7 @@ class DBManager:
             self._engine = None
         return self
 
-    def gen_session_factory(self, **kwargs) -> "DBManager":
+    def create_session_factory(self, **kwargs) -> "DBManager":
         """
         Args:
             kwargs  => passed to SQLAlchemy sessionmaker constructor
@@ -125,10 +128,10 @@ class DBManager:
             raise RuntimeError("Cannot attach new session factory without removing existing Engine")
 
         # Generate sessionmaker session factory
-        self._session_factory = sessionmaker(bind=self.engine, **kwargs)
+        self._session_factory = SessionMaker(bind=self._engine, **kwargs)
         # If scoped sessions, wrap in scoped_sessions factory
         if self._scoped_sessions:
-            self._session_factory = scoped_session(self._session_factory)
+            self._session_factory = ScopedSession(self._session_factory)
         return self
 
     def gen_session(self, persist: bool = True) -> DBManagerSession:
@@ -147,7 +150,7 @@ class DBManager:
             RuntimeError: if session factory hasn't been created yet, or 
                           if self.session is already set and persist is True (for non-scoped sessions)
         """
-        # Ensure session factor has been created
+        # Ensure session factory has been created
         if not self._session_factory:
             raise ValueError("Session factory not initialized")
 
@@ -193,19 +196,19 @@ class DBManager:
         Preconditions:
             N/A
         Raises:
-            ValueError: if bootstrap and self._metadata isn't defined
+            ValueError: if bootstrap and self.metadata isn't defined
         """
         # Generate database engine if needed
         if not self._engine:
-            self.gen_engine()
+            self.create_engine()
         # Bootstrap database if asked
         if bootstrap:
-            if not self._metadata:
+            if not self.metadata:
                 raise ValueError("No MetaData to bootstrap database with")
-            self.bootstrap_db(self._engine, self._metadata)
+            self.bootstrap_db(self._engine, self.metadata)
         # Generate session factory if needed
         if not self._session_factory:
-            self.gen_session_factory()
+            self.create_session_factory()
 
     def _assert_session(self) -> None:
         """
