@@ -20,7 +20,10 @@
 ## OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 ## SOFTWARE.
 
+import os
+
 from sqlalchemy.event import listen
+from sqlalchemy.ext.compiler import compiles
 from sqlalchemy.schema import DDLElement, MetaData, Table
 from sqlalchemy.sql.expression import FromClause
 
@@ -39,9 +42,9 @@ class CreateViewExpression(DDLElement):
 
 @compiles(CreateViewExpression)
 def generate_view_create_expression(element, compiler, **kwargs) -> str:
-    return "CREATE OR REPLACE VIEW {} AS {}".format(element.name,
-                                                    compiler.sql_compiler.process(element.selectable,
-                                                                                  literal_binds=True))
+    return "CREATE VIEW {} AS {}".format(element.name,
+                                         compiler.sql_compiler.process(element.selectable,
+                                                                       literal_binds=True))
 
 
 class CreateMaterializedViewExpression(CreateViewExpression):
@@ -49,9 +52,9 @@ class CreateMaterializedViewExpression(CreateViewExpression):
 
 @compiles(CreateMaterializedViewExpression, "postgresql")
 def generate_mview_create_expression(element, compiler, **kwargs) -> str:
-    return "CREATE OR REPLACE VIEW {} AS {}".format(element.name,
-                                                    compiler.sql_compiler.process(element.selectable,
-                                                                                  literal_binds=True))
+    return "CREATE MATERIALIZED VIEW {} AS {}".format(element.name,
+                                                      compiler.sql_compiler.process(element.selectable,
+                                                                                    literal_binds=True))
 
 
 class DropViewExpression(DDLElement):
@@ -102,3 +105,116 @@ def create_view(name: str, selectable: FromClause, metadata: MetaData, materiali
            "before_drop",
            DropMaterializedViewExpression(name) if materialized else DropViewExpression(name))
     return tbl
+
+
+if os.environ.get("ENVIRONMENT") == "TEST":
+    from datetime import datetime
+    import unittest
+
+    from sqlalchemy import (
+        Column,
+        create_engine,
+        DateTime,
+        ForeignKey,
+        Integer,
+        Text
+    )
+    from sqlalchemy.ext.declarative import declarative_base
+    from sqlalchemy.orm import sessionmaker
+    from sqlalchemy.sql import select
+
+
+    BaseTable = declarative_base()
+
+
+    class User(BaseTable):
+        __tablename__ = "user"
+
+        id = Column(Integer, primary_key=True)
+        first_name = Column(Text, nullable=False)
+        last_name = Column(Text, nullable=False)
+        email = Column(Text, nullable=False)
+
+    
+    class Post(BaseTable):
+        __tablename__ = "post"
+
+        id = Column(Integer, primary_key=True)
+        user_id = Column(Integer, ForeignKey("user.id"), nullable=False)
+        content = Column(Text, nullable=False)
+        created_at = Column(DateTime, nullable=False)
+
+
+    PostAuditTimeline = create_view("post_audit_timeline",
+                                    select([User.id, User.first_name, Post.created_at], order_by=Post.created_at),
+                                    BaseTable.metadata)
+
+
+    class TestViewUtilities(unittest.TestCase):
+        """Tests for view creation/drop utilities."""
+
+        def setUp(self):
+            # Create SQLAlchemy engine for in-memory SQLite database
+            self.engine = create_engine("sqlite:///:memory:")
+            # Create all tables in database
+            BaseTable.metadata.create_all(self.engine)
+            # Bind sessionmaker instance to engine
+            self.session_factory = sessionmaker(bind=self.engine)
+            # Create session
+            self.session = self.session_factory()
+
+        def test_create_view_expression_single_table(self):
+            """Test that view creation query compiles correctly
+            where view selects from a single table.
+            """
+            # Create view query
+            view_query = select([User.id, User.first_name, User.last_name])
+            # Set expected output
+            ddl_statement = ("CREATE VIEW user_names AS "
+                             "SELECT \"user\".id, \"user\".first_name, \"user\".last_name FROM \"user\"")
+            # NOTE: have to remove newline because SQLAlchemy's select inserts them by default
+            self.assertEqual(ddl_statement,
+                             str(CreateViewExpression("user_names", view_query)).replace("\n", ""))
+
+        def test_create_view_expression_join(self):
+            """Test that view creation query compiles correctly
+            where view selects from two tables (with join).
+            """
+            # Create view query
+            view_query = select([
+                User.id,
+                (User.first_name + User.last_name).label("full_name"),
+                Post.content
+            ])
+            ddl_statement = ("CREATE VIEW user_posts AS "
+                             "SELECT \"user\".id, \"user\".first_name || \"user\".last_name AS full_name, post.content "
+                             "FROM \"user\", post")
+            self.assertEqual(ddl_statement,
+                             str(CreateViewExpression("user_posts", view_query)).replace("\n", ""))
+
+        def test_drop_view_expression_single_table(self):
+            """Test that drop view query compiles correctly."""
+            self.assertEqual("DROP VIEW IF EXISTS user_names", str(DropViewExpression("user_names")))
+
+        def test_select_from_created_view(self):
+            """Test that PostAuditTimeline was created in database and
+            has the right columns by:
+                1) Adding a User record
+                2) Adding a Post record tied to User
+                3) Selecting from view
+            """
+            # Add User record to database
+            user = User(first_name="Susan", last_name="Sarandon", email="susan.sarandon@gmail.com")
+            self.session.add(user)
+            self.session.commit()
+            # Add Post record to database
+            created_at_datetime = datetime.utcnow()
+            post = Post(user_id=user.id, content="<h1>This is a post</h1>", created_at=created_at_datetime)
+            self.session.add(post)
+            self.session.commit()
+            # Select records from post_audit_timeline and ensure match up with records in database
+            self.assertEqual([(1, "Susan", created_at_datetime)], self.session.query(PostAuditTimeline).all())
+
+        def tearDown(self):
+            self.session.close()
+            self.engine.dispose()
