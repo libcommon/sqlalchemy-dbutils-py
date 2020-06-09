@@ -155,7 +155,8 @@ if os.environ.get("ENVIRONMENT") == "TEST":
 
         def setUp(self):
             # Create SQLAlchemy engine for in-memory SQLite database
-            self.engine = create_engine("sqlite:///:memory:")
+            # See: https://docs.sqlalchemy.org/en/13/core/engines.html#sqlite
+            self.engine = create_engine("sqlite://")
             # Create all tables in database
             BaseTable.metadata.create_all(self.engine)
             # Bind sessionmaker instance to engine
