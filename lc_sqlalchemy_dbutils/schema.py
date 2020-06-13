@@ -21,8 +21,6 @@
 ## SOFTWARE.
 # pylint: disable=W0613
 
-from typing import Optional
-
 from sqlalchemy.engine.interfaces import Compiled
 from sqlalchemy.ext.compiler import compiles
 from sqlalchemy.sql.expression import ClauseElement
