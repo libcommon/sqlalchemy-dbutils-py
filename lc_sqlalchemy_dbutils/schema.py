@@ -57,37 +57,3 @@ def generate_timestamp_expression_pgsql(element: TimestampDefaultExpression, com
 @compiles(TimestampDefaultExpression, "sqlite")
 def generate_timestamp_expression_sqlite(element: TimestampDefaultExpression, compiler: Compiled, **kwargs):
     return "CURRENT_TIMESTAMP"
-
-
-class UnicodeTextDefaultType(ClauseElement):
-    """Class to generate server default text/string type
-    based on SQL dialect. To be used with the `type`
-    parameter in the sqlalchemy.schema.Column constructor. In all
-    cases prefers SQL types that support variable-length Unicode
-    characters.
-    """
-    def __init__(self, length: Optional[int] = None) -> None:
-        self.length = length
-
-@compiles(UnicodeTextDefaultType, "mssql")
-def generate_ntext_type_mssql(element: UnicodeTextDefaultType, compiler: Compiled, **kwargs):
-    length = "MAX" if not element.length or element.length <= 0 else element.length
-    return "NVARCHAR({})".format(length)
-
-@compiles(UnicodeTextDefaultType, "mysql")
-def generate_ntext_type_mysql(element: UnicodeTextDefaultType, compiler: Compiled, **kwargs):
-    return "TEXT"
-
-@compiles(UnicodeTextDefaultType, "oracle")
-def generate_ntext_type_oracle(element: UnicodeTextDefaultType, compiler: Compiled, **kwargs):
-    # see: https://docs.oracle.com/cd/B28359_01/server.111/b28318/datatype.htm#CNCPT1825
-    length = 4000 if not element.length or element.length <= 0 else element.length
-    return "NVARCHAR2({})".format(length)
-
-@compiles(UnicodeTextDefaultType, "postgresql")
-def generate_ntext_type_pgsql(element: UnicodeTextDefaultType, compiler: Compiled, **kwargs):
-    return "TEXT"
-
-@compiles(UnicodeTextDefaultType, "sqlite")
-def generate_ntext_type_sqlite(element: UnicodeTextDefaultType, compiler: Compiled, **kwargs):
-    return "TEXT"
