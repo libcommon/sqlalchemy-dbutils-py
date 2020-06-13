@@ -1,17 +1,17 @@
 ##  -*- coding: UTF8 -*-
 ## view.py
 ## Copyright (c) 2020 libcommon
-## 
+##
 ## Permission is hereby granted, free of charge, to any person obtaining a copy
 ## of this software and associated documentation files (the "Software"), to deal
 ## in the Software without restriction, including without limitation the rights
 ## to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
 ## copies of the Software, and to permit persons to whom the Software is
 ## furnished to do so, subject to the following conditions:
-## 
+##
 ## The above copyright notice and this permission notice shall be included in all
 ## copies or substantial portions of the Software.
-## 
+##
 ## THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
 ## IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
 ## FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
@@ -19,9 +19,12 @@
 ## LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 ## OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 ## SOFTWARE.
+# pylint: disable=W0613
 
 import os
 
+from sqlalchemy import Column
+from sqlalchemy.engine.interfaces import Compiled
 from sqlalchemy.event import listen
 from sqlalchemy.ext.compiler import compiles
 from sqlalchemy.schema import DDLElement, MetaData, Table
@@ -33,7 +36,7 @@ __author__ = "libcommon"
 
 class CreateViewExpression(DDLElement):
     """Custom DDL element to create SQL view.
-    NOTE: Implementation taken from 
+    NOTE: Implementation taken from
     http://www.jeffwidman.com/blog/847/using-sqlalchemy-to-create-and-manage-postgresql-materialized-views/
     """
     def __init__(self, name: str, selectable: FromClause) -> None:
@@ -41,7 +44,7 @@ class CreateViewExpression(DDLElement):
         self.selectable = selectable
 
 @compiles(CreateViewExpression)
-def generate_view_create_expression(element, compiler, **kwargs) -> str:
+def generate_view_create_expression(element: CreateViewExpression, compiler: Compiled, **kwargs) -> str:
     return "CREATE VIEW {} AS {}".format(element.name,
                                          compiler.sql_compiler.process(element.selectable,
                                                                        literal_binds=True))
@@ -51,7 +54,7 @@ class CreateMaterializedViewExpression(CreateViewExpression):
     """Custom DDL Element to create Postgres materialized view (see: CreateViewExpression)."""
 
 @compiles(CreateMaterializedViewExpression, "postgresql")
-def generate_mview_create_expression(element, compiler, **kwargs) -> str:
+def generate_mview_create_expression(element, compiler: Compiled, **kwargs) -> str:
     return "CREATE MATERIALIZED VIEW {} AS {}".format(element.name,
                                                       compiler.sql_compiler.process(element.selectable,
                                                                                     literal_binds=True))
@@ -63,7 +66,7 @@ class DropViewExpression(DDLElement):
         self.name = name
 
 @compiles(DropViewExpression)
-def generate_view_drop_expression(element, compiler, **kwargs) -> str:
+def generate_view_drop_expression(element, compiler: Compiled, **kwargs) -> str:
     return "DROP VIEW IF EXISTS {}".format(element.name)
 
 
@@ -71,7 +74,7 @@ class DropMaterializedViewExpression(DropViewExpression):
     """Cusotm DDL element to drop Postgres materialized view."""
 
 @compiles(DropMaterializedViewExpression, "postgresql")
-def generate_mview_drop_expression(element, compiler, **kwargs) -> str:
+def generate_mview_drop_expression(element, compiler: Compiled, **kwargs) -> str:
     return "DROP MATERIZLIZED VIEW IF EXISTS {}".format(element.name)
 
 
@@ -111,38 +114,11 @@ if os.environ.get("ENVIRONMENT") == "TEST":
     from datetime import datetime
     import unittest
 
-    from sqlalchemy import (
-        Column,
-        create_engine,
-        DateTime,
-        ForeignKey,
-        Integer,
-        Text
-    )
-    from sqlalchemy.ext.declarative import declarative_base
+    from sqlalchemy.engine import create_engine
     from sqlalchemy.orm import sessionmaker
     from sqlalchemy.sql import select
 
-
-    BaseTable = declarative_base()
-
-
-    class User(BaseTable):
-        __tablename__ = "user"
-
-        id = Column(Integer, primary_key=True)
-        first_name = Column(Text, nullable=False)
-        last_name = Column(Text, nullable=False)
-        email = Column(Text, nullable=False)
-
-    
-    class Post(BaseTable):
-        __tablename__ = "post"
-
-        id = Column(Integer, primary_key=True)
-        user_id = Column(Integer, ForeignKey("user.id"), nullable=False)
-        content = Column(Text, nullable=False)
-        created_at = Column(DateTime, nullable=False)
+    from tests.common import BaseTable, User, Post
 
 
     PostAuditTimeline = create_view("post_audit_timeline",
@@ -206,16 +182,17 @@ if os.environ.get("ENVIRONMENT") == "TEST":
             """
             # Add User record to database
             user = User(first_name="Susan", last_name="Sarandon", email="susan.sarandon@gmail.com")
-            self.session.add(user)
-            self.session.commit()
+            # NOTE: Pylint doesn't see these methods on Session type
+            self.session.add(user)  # pylint: disable=E1101
+            self.session.commit()   # pylint: disable=E1101
             # Add Post record to database
             created_at_datetime = datetime.utcnow()
             post = Post(user_id=user.id, content="<h1>This is a post</h1>", created_at=created_at_datetime)
-            self.session.add(post)
-            self.session.commit()
+            self.session.add(post)  # pylint: disable=E1101
+            self.session.commit()   # pylint: disable=E1101
             # Select records from post_audit_timeline and ensure match up with records in database
-            self.assertEqual([(1, "Susan", created_at_datetime)], self.session.query(PostAuditTimeline).all())
+            self.assertEqual([(1, "Susan", created_at_datetime)], self.session.query(PostAuditTimeline).all())  # pylint: disable=E1101
 
         def tearDown(self):
-            self.session.close()
+            self.session.close()    # pylint: disable=E1101
             self.engine.dispose()
