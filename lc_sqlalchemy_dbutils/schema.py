@@ -57,7 +57,3 @@ def generate_timestamp_expression_pgsql(element: TimestampDefaultExpression, com
 @compiles(TimestampDefaultExpression, "sqlite")
 def generate_timestamp_expression_sqlite(element: TimestampDefaultExpression, compiler: Compiled, **kwargs):
     return "CURRENT_TIMESTAMP"
-
-
-if os.environ.get("ENVIRONMENT") == "TEST":
-    import unittest
