@@ -132,6 +132,10 @@ class DBManager:
         Raises:
             N/A
         """
+        # If have active session, close it before engine
+        if self.session():
+            self.close_session()
+
         # If self._engine defined
         if self._engine:
             # Dispose of existing connection pool
